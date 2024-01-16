@@ -12,6 +12,8 @@ import io.grpc.stub.StreamObserver;
 import io.numaproj.numaflow.reduce.v1.ReduceOuterClass;
 import io.numaproj.numaflow.reducestreamer.model.HandlerDatum;
 import io.numaproj.numaflow.reducestreamer.model.Metadata;
+import io.numaproj.numaflow.reducestreamer.user.OutputStreamObserver;
+import io.numaproj.numaflow.reducestreamer.user.OutputStreamObserverImpl;
 import io.numaproj.numaflow.reducestreamer.user.ReduceStreamer;
 import io.numaproj.numaflow.reducestreamer.user.ReduceStreamerFactory;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +86,7 @@ class ReduceSupervisorActor extends AbstractActor {
                 .create()
                 .match(ActorRequest.class, this::invokeActors)
                 .match(String.class, this::sendEOF)
-                .match(ActorEOFResponse.class, this::eofResponseListener)
+                .match(ActorResponse.class, this::eofResponseListener)
                 .build();
     }
 
@@ -102,8 +104,11 @@ class ReduceSupervisorActor extends AbstractActor {
                     .actorOf(ReduceStreamerActor.props(
                             keys,
                             md,
-                            reduceStreamerHandler,
-                            responseObserver));
+                            reduceStreamerHandler));
+            OutputStreamObserver outputStreamObserver = new OutputStreamObserverImpl(actorRef);
+            // Link the observer to the actor
+            ((ReduceStreamerActor) actorRef).setStreamObserver(
+                    outputStreamObserver);
             actorsMap.put(uniqueId, actorRef);
         }
 
@@ -118,15 +123,15 @@ class ReduceSupervisorActor extends AbstractActor {
     }
 
     // listen to child actors for the result.
-    private void eofResponseListener(ActorEOFResponse actorEOFResponse) {
+    private void eofResponseListener(ActorResponse actorResponse) {
         /*
             send the result back to the client
             remove the child entry from the map after getting result.
             if there are no entries in the map, that means processing is
             done we can close the stream.
          */
-        responseObserver.onNext(actorEOFResponse.getResponse());
-        actorsMap.remove(actorEOFResponse.getUniqueIdentifier());
+        responseObserver.onNext(actorResponse.getResponse());
+        actorsMap.remove(actorResponse.getUniqueIdentifier());
         if (actorsMap.isEmpty()) {
             responseObserver.onCompleted();
             getContext().getSystem().stop(getSelf());
