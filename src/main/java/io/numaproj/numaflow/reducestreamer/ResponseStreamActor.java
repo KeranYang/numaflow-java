@@ -51,6 +51,10 @@ public class ResponseStreamActor extends AbstractActor {
         synchronized (responseObserver) {
             responseObserver.onNext(actorEOFResponse.getResponse());
         }
+        System.out.println("kerantest" + getSender().toString());
+        getSender().tell(
+                new EofResponseSentSignal(actorEOFResponse.getResponse()),
+                getSelf());
     }
 
     private ReduceOuterClass.ReduceResponse buildResponse(Message message) {

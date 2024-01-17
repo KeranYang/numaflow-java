@@ -91,6 +91,7 @@ class ReduceSupervisorActor extends AbstractActor {
                 .match(ActorRequest.class, this::invokeActors)
                 .match(String.class, this::sendEOF)
                 .match(ActorEOFResponse.class, this::eofResponseListener)
+                .match(EofResponseSentSignal.class, this::cleanup)
                 .build();
     }
 
@@ -126,17 +127,33 @@ class ReduceSupervisorActor extends AbstractActor {
 
     // listen to child actors for the result.
     // TODO - send the result to the ResponseStreamActor to send back.
-    private void eofResponseListener(ActorEOFResponse actorEOFResponse) {
+    private void eofResponseListener(ActorEOFResponse actorEOFResponse) throws InterruptedException {
         /*
             send the result back to the client
             remove the child entry from the map after getting result.
             if there are no entries in the map, that means processing is
             done we can close the stream.
          */
-        this.responseStreamActor.tell(actorEOFResponse, ActorRef.noSender());
+        this.responseStreamActor.tell(actorEOFResponse, getSelf());
+        // The response stream actor should tell the supervisor that it has finished sending the EOF response.
+        // That's when the supervisor can remove the entry from the map.
+        /*
         actorsMap.remove(actorEOFResponse.getUniqueIdentifier());
         if (actorsMap.isEmpty()) {
             responseObserver.onCompleted();
+            Thread.sleep(5000);
+            getContext().getSystem().stop(getSelf());
+        }
+
+         */
+    }
+
+    private void cleanup(EofResponseSentSignal eofResponseSentSignal) throws InterruptedException {
+        System.out.println("received eofResponseSentSignal");
+        actorsMap.remove(eofResponseSentSignal.getUniqueIdentifier());
+        if (actorsMap.isEmpty()) {
+            responseObserver.onCompleted();
+            // Thread.sleep(5000);
             getContext().getSystem().stop(getSelf());
         }
     }

@@ -28,7 +28,6 @@ public class ReduceStreamerActor extends AbstractActor {
     private String[] keys;
     private Metadata md;
     private ReduceStreamer groupBy;
-
     private OutputStreamObserver outputStream;
 
     public static Props props(
@@ -56,6 +55,7 @@ public class ReduceStreamerActor extends AbstractActor {
 
     private void sendEOF(String EOF) {
         this.groupBy.handleEndOfStream(keys, outputStream, md);
+        // EOF is always sent from the supervisor actor.
         getSender().tell(buildEOFResponse(), getSelf());
     }
 

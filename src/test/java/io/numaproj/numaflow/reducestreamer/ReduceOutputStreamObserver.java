@@ -19,10 +19,13 @@ public class ReduceOutputStreamObserver implements StreamObserver<ReduceOuterCla
     public Throwable t;
 
     @Override
-    public void onNext(ReduceOuterClass.ReduceResponse response) {
+    public synchronized void onNext(ReduceOuterClass.ReduceResponse response) {
+        System.out.println("I am writing a response to the output stream.");
         List<ReduceOuterClass.ReduceResponse> receivedResponses = resultDatum.get();
         receivedResponses.add(response);
         resultDatum.set(receivedResponses);
+        System.out.println("I finished writing a response to the output stream.");
+        System.out.println("Now the size is" + resultDatum.get().size());
     }
 
     @Override
