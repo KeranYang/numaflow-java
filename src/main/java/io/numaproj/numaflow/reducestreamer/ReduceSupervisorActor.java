@@ -133,7 +133,8 @@ class ReduceSupervisorActor extends AbstractActor {
             if there are no entries in the map, that means processing is
             done we can close the stream.
          */
-        this.responseStreamActor.tell(actorEOFResponse, ActorRef.noSender());
+        // TODO - no, all onNext invoking should be in the response stream actor.
+        responseObserver.onNext(actorEOFResponse.getResponse());
         actorsMap.remove(actorEOFResponse.getUniqueIdentifier());
         if (actorsMap.isEmpty()) {
             responseObserver.onCompleted();

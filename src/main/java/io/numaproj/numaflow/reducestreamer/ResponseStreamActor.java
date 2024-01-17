@@ -35,7 +35,6 @@ public class ResponseStreamActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(Message.class, this::sendMessage)
-                .match(ActorEOFResponse.class, this::sendEOF)
                 .build();
     }
 
@@ -43,13 +42,6 @@ public class ResponseStreamActor extends AbstractActor {
         // Synchronized access to the output stream
         synchronized (responseObserver) {
             responseObserver.onNext(this.buildResponse(message));
-        }
-    }
-
-    private void sendEOF(ActorEOFResponse actorEOFResponse) {
-        // Synchronized access to the output stream
-        synchronized (responseObserver) {
-            responseObserver.onNext(actorEOFResponse.getResponse());
         }
     }
 
