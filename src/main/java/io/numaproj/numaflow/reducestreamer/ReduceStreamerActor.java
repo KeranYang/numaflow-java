@@ -1,10 +1,10 @@
 package io.numaproj.numaflow.reducestreamer;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.japi.pf.ReceiveBuilder;
 import com.google.protobuf.Timestamp;
-import io.grpc.stub.StreamObserver;
 import io.numaproj.numaflow.reduce.v1.ReduceOuterClass;
 import io.numaproj.numaflow.reducestreamer.model.HandlerDatum;
 import io.numaproj.numaflow.reducestreamer.model.Metadata;
@@ -28,17 +28,17 @@ public class ReduceStreamerActor extends AbstractActor {
     private String[] keys;
     private Metadata md;
     private ReduceStreamer groupBy;
+
     private OutputStreamObserver outputStream;
 
     public static Props props(
-            String[] keys, Metadata md, ReduceStreamer groupBy,
-            StreamObserver<ReduceOuterClass.ReduceResponse> responseStreamObserver) {
+            String[] keys, Metadata md, ReduceStreamer groupBy, ActorRef responseStreamActor) {
         return Props.create(
                 ReduceStreamerActor.class,
                 keys,
                 md,
                 groupBy,
-                new OutputStreamObserverImpl(md, responseStreamObserver));
+                new OutputStreamObserverImpl(responseStreamActor));
     }
 
     @Override

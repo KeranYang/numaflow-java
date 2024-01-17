@@ -31,6 +31,8 @@ class ReduceSupervisorActor extends AbstractActor {
     private final ReduceStreamerFactory<? extends ReduceStreamer> reduceStreamerFactory;
     private final Metadata md;
     private final ActorRef shutdownActor;
+    // TODO - hide the responseObserver behind this actor?
+    private final ActorRef responseStreamActor;
     private final StreamObserver<ReduceOuterClass.ReduceResponse> responseObserver;
     private final Map<String, ActorRef> actorsMap = new HashMap<>();
 
@@ -38,10 +40,12 @@ class ReduceSupervisorActor extends AbstractActor {
             ReduceStreamerFactory<? extends ReduceStreamer> reduceStreamerFactory,
             Metadata md,
             ActorRef shutdownActor,
+            ActorRef responseStreamActor,
             StreamObserver<ReduceOuterClass.ReduceResponse> responseObserver) {
         this.reduceStreamerFactory = reduceStreamerFactory;
         this.md = md;
         this.shutdownActor = shutdownActor;
+        this.responseStreamActor = responseStreamActor;
         this.responseObserver = responseObserver;
     }
 
@@ -49,12 +53,14 @@ class ReduceSupervisorActor extends AbstractActor {
             ReduceStreamerFactory<? extends ReduceStreamer> reduceStreamerFactory,
             Metadata md,
             ActorRef shutdownActor,
+            ActorRef responseStreamActor,
             StreamObserver<ReduceOuterClass.ReduceResponse> responseObserver) {
         return Props.create(
                 ReduceSupervisorActor.class,
                 reduceStreamerFactory,
                 md,
                 shutdownActor,
+                responseStreamActor,
                 responseObserver);
     }
 
@@ -102,9 +108,9 @@ class ReduceSupervisorActor extends AbstractActor {
             ActorRef actorRef = getContext()
                     .actorOf(ReduceStreamerActor.props(
                             keys,
-                            md,
+                            this.md,
                             reduceStreamerHandler,
-                            responseObserver));
+                            this.responseStreamActor));
             actorsMap.put(uniqueId, actorRef);
         }
 
@@ -119,6 +125,7 @@ class ReduceSupervisorActor extends AbstractActor {
     }
 
     // listen to child actors for the result.
+    // TODO - send the result to the ResponseStreamActor to send back.
     private void eofResponseListener(ActorEOFResponse actorEOFResponse) {
         /*
             send the result back to the client
@@ -126,6 +133,7 @@ class ReduceSupervisorActor extends AbstractActor {
             if there are no entries in the map, that means processing is
             done we can close the stream.
          */
+        // TODO - no, all onNext invoking should be in the response stream actor.
         responseObserver.onNext(actorEOFResponse.getResponse());
         actorsMap.remove(actorEOFResponse.getUniqueIdentifier());
         if (actorsMap.isEmpty()) {

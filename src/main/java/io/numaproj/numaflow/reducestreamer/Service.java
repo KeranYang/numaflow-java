@@ -81,6 +81,10 @@ class Service extends ReduceGrpc.ReduceImplBase {
         reduceActorSystem.getEventStream().subscribe(shutdownActorRef, AllDeadLetters.class);
 
         handleFailure(failureFuture, responseObserver);
+
+        // create a response stream actor that ensure synchronized delivery of reduce responses.
+        ActorRef responseStreamActor = reduceActorSystem.
+                actorOf(ResponseStreamActor.props(responseObserver, md));
         /*
             create a supervisor actor which assign the tasks to child actors.
             we create a child actor for every unique set of keys in a window
@@ -90,6 +94,7 @@ class Service extends ReduceGrpc.ReduceImplBase {
                         reduceStreamerFactory,
                         md,
                         shutdownActorRef,
+                        responseStreamActor,
                         responseObserver));
 
 
