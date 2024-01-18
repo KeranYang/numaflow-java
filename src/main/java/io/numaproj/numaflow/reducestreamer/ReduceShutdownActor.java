@@ -49,7 +49,7 @@ class ReduceShutdownActor extends AbstractActor {
 
     // if there are no exceptions, complete the future without exception.
     private void completedSuccessfully(String eof) {
-        log.info("completed successfully of shutdown executed");
+        log.debug("completed successfully of shutdown executed");
         failureFuture.complete(null);
         // if all the actors completed successfully, we can stop the shutdown actor.
         getContext().getSystem().stop(getSelf());

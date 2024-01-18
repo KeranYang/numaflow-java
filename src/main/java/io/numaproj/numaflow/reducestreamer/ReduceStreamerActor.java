@@ -54,12 +54,13 @@ public class ReduceStreamerActor extends AbstractActor {
     }
 
     private void sendEOF(String EOF) {
+        // constructing final responses based on the messages processed so far and sending them out.
         this.groupBy.handleEndOfStream(keys, outputStream, md);
-        // EOF is always sent from the supervisor actor.
+        // constructing an EOF response and sending it back to the supervisor actor.
         getSender().tell(buildEOFResponse(), getSelf());
     }
 
-    private ActorEOFResponse buildEOFResponse() {
+    private ActorResponse buildEOFResponse() {
         ReduceOuterClass.ReduceResponse.Builder responseBuilder = ReduceOuterClass.ReduceResponse.newBuilder();
         responseBuilder.setWindow(ReduceOuterClass.Window.newBuilder()
                 .setStart(Timestamp.newBuilder()
@@ -75,6 +76,6 @@ public class ReduceStreamerActor extends AbstractActor {
                 .newBuilder()
                 .addAllKeys(List.of(this.keys))
                 .build());
-        return new ActorEOFResponse(responseBuilder.build());
+        return new ActorResponse(responseBuilder.build(), ActorResponseType.EOF_RESPONSE);
     }
 }

@@ -17,7 +17,9 @@ import java.util.List;
 
 /**
  * ResponseStreamActor is dedicated to ensure synchronized calls to the responseObserver onNext().
- * ALL the response messages are sent to ResponseStreamActor before getting sent to output gRPC stream.
+ * ALL the responses are sent to ResponseStreamActor before getting sent to output gRPC stream.
+ * <p>
+ * More details about gRPC StreamObserver concurrency: https://grpc.github.io/grpc-java/javadoc/io/grpc/stub/StreamObserver.html
  */
 @Slf4j
 @AllArgsConstructor
@@ -35,7 +37,7 @@ public class ResponseStreamActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(Message.class, this::sendMessage)
-                .match(ActorEOFResponse.class, this::sendEOF)
+                .match(ActorResponse.class, this::sendEOF)
                 .build();
     }
 
@@ -46,14 +48,22 @@ public class ResponseStreamActor extends AbstractActor {
         }
     }
 
-    private void sendEOF(ActorEOFResponse actorEOFResponse) {
+    private void sendEOF(ActorResponse actorResponse) {
+        if (actorResponse.getType() != ActorResponseType.EOF_RESPONSE) {
+            throw new RuntimeException(
+                    "Unexpected behavior - Response Stream actor received a non-eof response. Response type is: "
+                            + actorResponse.getType());
+        }
         // Synchronized access to the output stream
         synchronized (responseObserver) {
-            responseObserver.onNext(actorEOFResponse.getResponse());
+            responseObserver.onNext(actorResponse.getResponse());
         }
-        System.out.println("kerantest" + getSender().toString());
+        // After the EOF response gets sent to gRPC output stream,
+        // tell the supervisor that the actor is ready to be cleaned up.
         getSender().tell(
-                new EofResponseSentSignal(actorEOFResponse.getResponse()),
+                new ActorResponse(
+                        actorResponse.getResponse(),
+                        ActorResponseType.READY_FOR_CLEAN_UP_SIGNAL),
                 getSelf());
     }
 
@@ -78,7 +88,6 @@ public class ResponseStreamActor extends AbstractActor {
                 .addAllTags(
                         message.getTags() == null ? new ArrayList<>():List.of(message.getTags()))
                 .build());
-
         return responseBuilder.build();
     }
 }
