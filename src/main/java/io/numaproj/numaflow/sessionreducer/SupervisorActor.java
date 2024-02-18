@@ -8,8 +8,11 @@ import akka.actor.SupervisorStrategy;
 import akka.japi.pf.DeciderBuilder;
 import akka.japi.pf.ReceiveBuilder;
 import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import io.numaproj.numaflow.sessionreduce.v1.Sessionreduce;
+import io.numaproj.numaflow.sessionreducer.blocking.BlockingManager;
+import io.numaproj.numaflow.sessionreducer.blocking.BlockingManagerImpl;
 import io.numaproj.numaflow.sessionreducer.model.SessionReducer;
 import io.numaproj.numaflow.sessionreducer.model.SessionReducerFactory;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +21,7 @@ import scala.collection.Iterable;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -37,6 +41,8 @@ class SupervisorActor extends AbstractActor {
     private final Map<String, Integer> mergeTracker = new HashMap<>();
     // when set to true, isInputStreamClosed means the gRPC input stream has reached EOF.
     private boolean isInputStreamClosed = false;
+    // a blocking manager to block the input stream when handling MERGE operations.
+    private final BlockingManager blockingManager = new BlockingManagerImpl();
 
     public SupervisorActor(
             SessionReducerFactory<? extends SessionReducer> sessionReducerFactory,
@@ -89,6 +95,17 @@ class SupervisorActor extends AbstractActor {
     }
 
     private void handleEOF(String EOF) {
+        // if the supervisor actor is blocking, queue the EOF request.
+        if (this.blockingManager.isBlocking()) {
+            System.out.println("kerantest - is blocking, queue EOF");
+            this.blockingManager.enqueueRequest(Sessionreduce.SessionReduceRequest.newBuilder()
+                    .setPayload(Sessionreduce.SessionReduceRequest.Payload
+                            .newBuilder()
+                            .setValue(ByteString.copyFromUtf8("EOF Signal"))
+                            .build()).build());
+            return;
+        }
+
         this.isInputStreamClosed = true;
         if (actorsMap.isEmpty()) {
             this.outputActor.tell(EOF, getSelf());
@@ -100,6 +117,12 @@ class SupervisorActor extends AbstractActor {
     }
 
     private void handleReduceRequest(Sessionreduce.SessionReduceRequest request) {
+        if (this.blockingManager.isBlocking()) {
+            System.out.println("kerantest - is blocking, queue request");
+            System.out.println(request);
+            this.blockingManager.enqueueRequest(request);
+            return;
+        }
         Sessionreduce.SessionReduceRequest.WindowOperation windowOperation = request.getOperation();
         switch (windowOperation.getEvent()) {
             case OPEN: {
@@ -185,6 +208,10 @@ class SupervisorActor extends AbstractActor {
                 break;
             }
             case MERGE: {
+                // when receiving a MERGE request, block receiving new requests until MERGE request finishes.
+                System.out.println("kerantest - received MERGE, block input");
+                this.blockingManager.block();
+
                 Timestamp mergedStartTime = windowOperation.getKeyedWindows(0).getStart();
                 Timestamp mergedEndTime = windowOperation.getKeyedWindows(0).getEnd();
                 for (Sessionreduce.KeyedWindow window : windowOperation.getKeyedWindowsList()) {
@@ -357,6 +384,24 @@ class SupervisorActor extends AbstractActor {
             if (this.mergeTracker.get(mergeTaskId) == 0) {
                 // remove the task from the merge tracker when there is no more pending accumulators to merge.
                 this.mergeTracker.remove(mergeTaskId);
+
+                // FIXME - while we are sending the queued requests, there can be new requests sending from input stream...
+                // How do we maintain the order?
+                System.out.println("kerantest - finished MERGE, unblock");
+                List<Sessionreduce.SessionReduceRequest> pendingRequests = this.blockingManager.unblock();
+                for (Sessionreduce.SessionReduceRequest request : pendingRequests) {
+                    if (request.getPayload().getValue().toStringUtf8().equals("EOF Signal")) {
+                        // send EOF to self
+                        System.out.println("kerantest - sending EOF to self");
+                        System.out.println(request);
+                        getSelf().tell(Constants.EOF, ActorRef.noSender());
+                    } else {
+                        // send the request to self
+                        System.out.println("kerantest - sending queued request to self");
+                        System.out.println(request);
+                        getSelf().tell(request, ActorRef.noSender());
+                    }
+                }
             }
         }
     }

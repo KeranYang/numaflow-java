@@ -109,6 +109,8 @@ class SessionReducerActor extends AbstractActor {
             // we only process EOF once.
             return;
         }
+        System.out.println(
+                "I am asked to EOF - process it");
         this.processEOF();
     }
 
@@ -131,6 +133,7 @@ class SessionReducerActor extends AbstractActor {
                 ,
                 getSelf());
         // after finishing handling a GetAccumulatorRequest, the session is considered closed.
+        System.out.println("I finished handling a GetAccumulatorRequest, I am closing myself.");
         this.isClosed = true;
     }
 
@@ -152,6 +155,8 @@ class SessionReducerActor extends AbstractActor {
             if (this.eofPending) {
                 // I was asked to close, now that I finished the MERGE operation,
                 // I can close myself.
+                System.out.println(
+                        "I was asked to EOF - process it");
                 this.processEOF();
             }
         }
