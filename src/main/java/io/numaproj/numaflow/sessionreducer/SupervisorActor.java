@@ -38,6 +38,8 @@ class SupervisorActor extends AbstractActor {
     // when set to true, isInputStreamClosed means the gRPC input stream has reached EOF.
     private boolean isInputStreamClosed = false;
 
+    private ActorRef mergeRequestSender;
+
     public SupervisorActor(
             SessionReducerFactory<? extends SessionReducer> sessionReducerFactory,
             ActorRef shutdownActor,
@@ -185,6 +187,7 @@ class SupervisorActor extends AbstractActor {
                 break;
             }
             case MERGE: {
+                this.mergeRequestSender = getSender();
                 Timestamp mergedStartTime = windowOperation.getKeyedWindows(0).getStart();
                 Timestamp mergedEndTime = windowOperation.getKeyedWindows(0).getEnd();
                 for (Sessionreduce.KeyedWindow window : windowOperation.getKeyedWindowsList()) {
@@ -357,6 +360,7 @@ class SupervisorActor extends AbstractActor {
             if (this.mergeTracker.get(mergeTaskId) == 0) {
                 // remove the task from the merge tracker when there is no more pending accumulators to merge.
                 this.mergeTracker.remove(mergeTaskId);
+                this.mergeRequestSender.tell(new MergeResponse(), getSelf());
             }
         }
     }
