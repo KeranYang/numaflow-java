@@ -986,7 +986,7 @@ public class ServerTest {
     }
 
     @Test
-    public void open_merge_append_close() throws InterruptedException {
+    public void open_merge_append_close() {
         // create an output stream observer
         ReduceOutputStreamObserver outputStreamObserver = new ReduceOutputStreamObserver();
         StreamObserver<Sessionreduce.SessionReduceRequest> inputStreamObserver = SessionReduceGrpc
@@ -1251,7 +1251,7 @@ public class ServerTest {
     }
 
     @Test
-    public void open_merge_expand_close() throws InterruptedException {
+    public void open_merge_expand_close() {
         // create an output stream observer
         ReduceOutputStreamObserver outputStreamObserver = new ReduceOutputStreamObserver();
         StreamObserver<Sessionreduce.SessionReduceRequest> inputStreamObserver = SessionReduceGrpc
@@ -1542,7 +1542,7 @@ public class ServerTest {
     }
 
     @Test
-    public void open_merge_merge_close() throws InterruptedException {
+    public void open_merge_merge_close() {
         // create an output stream observer
         ReduceOutputStreamObserver outputStreamObserver = new ReduceOutputStreamObserver();
         StreamObserver<Sessionreduce.SessionReduceRequest> inputStreamObserver = SessionReduceGrpc

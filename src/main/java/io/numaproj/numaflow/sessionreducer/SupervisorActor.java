@@ -34,10 +34,12 @@ class SupervisorActor extends AbstractActor {
     private final Map<String, ActorRef> actorsMap = new HashMap<>();
     // mergeTracker keeps track of the merge tasks that are in progress.
     // key is the unique id of a merged task, value is how many accumulators are pending aggregation for this task.
+    // TODO - this is no longer needed - can be simplified by a counter.
     private final Map<String, Integer> mergeTracker = new HashMap<>();
     // when set to true, isInputStreamClosed means the gRPC input stream has reached EOF.
     private boolean isInputStreamClosed = false;
-
+    // mergeRequestSender is used to keep the reference to the merge request sender,
+    // it's used to report back when the MERGE request is completed.
     private ActorRef mergeRequestSender;
 
     public SupervisorActor(
@@ -256,14 +258,16 @@ class SupervisorActor extends AbstractActor {
     private void invokeActor(ActorRequest actorRequest) {
         String uniqueId = UniqueIdGenerator.getUniqueIdentifier(actorRequest.getKeyedWindow());
         switch (actorRequest.getType()) {
-            case OPEN: {
+            case OPEN:
+                // TODO - no need this
+            case MERGE_OPEN: {
                 SessionReducer sessionReducer = sessionReducerFactory.createSessionReducer();
                 ActorRef actorRef = getContext()
                         .actorOf(SessionReducerActor.props(
                                 actorRequest.getKeyedWindow(),
                                 sessionReducer,
-                                this.outputActor,
-                                false));
+                                this.outputActor
+                        ));
                 this.actorsMap.put(uniqueId, actorRef);
                 break;
             }
@@ -274,8 +278,7 @@ class SupervisorActor extends AbstractActor {
                             .actorOf(SessionReducerActor.props(
                                     actorRequest.getKeyedWindow(),
                                     sessionReducer,
-                                    this.outputActor,
-                                    false));
+                                    this.outputActor));
                     this.actorsMap.put(uniqueId, actorRef);
                 }
                 break;
@@ -288,17 +291,6 @@ class SupervisorActor extends AbstractActor {
             }
             case EXPAND: {
                 this.actorsMap.get(uniqueId).tell(actorRequest.getNewKeyedWindow(), getSelf());
-                break;
-            }
-            case MERGE_OPEN: {
-                SessionReducer sessionReducer = sessionReducerFactory.createSessionReducer();
-                ActorRef actorRef = getContext()
-                        .actorOf(SessionReducerActor.props(
-                                actorRequest.getKeyedWindow(),
-                                sessionReducer,
-                                this.outputActor,
-                                true));
-                this.actorsMap.put(uniqueId, actorRef);
                 break;
             }
             case GET_ACCUMULATOR: {
@@ -360,6 +352,7 @@ class SupervisorActor extends AbstractActor {
             if (this.mergeTracker.get(mergeTaskId) == 0) {
                 // remove the task from the merge tracker when there is no more pending accumulators to merge.
                 this.mergeTracker.remove(mergeTaskId);
+                // tell the gRPC input stream that the merge request is completely processed.
                 this.mergeRequestSender.tell(new MergeResponse(), getSelf());
             }
         }
