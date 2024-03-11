@@ -34,7 +34,6 @@ class SupervisorActor extends AbstractActor {
     private final Map<String, ActorRef> actorsMap = new HashMap<>();
     // mergeTracker keeps track of the merge tasks that are in progress.
     // key is the unique id of a merged task, value is how many accumulators are pending aggregation for this task.
-    // TODO - this is no longer needed - can be simplified by a counter.
     private final Map<String, Integer> mergeTracker = new HashMap<>();
     // when set to true, isInputStreamClosed means the gRPC input stream has reached EOF.
     private boolean isInputStreamClosed = false;
@@ -242,11 +241,11 @@ class SupervisorActor extends AbstractActor {
                 // the existing window with the new one.
                 // the accumulator of the old window will get merged to the new window eventually,
                 // when the supervisor receives the get accumulator response.
-                ActorRequest mergeOpenRequest = ActorRequest.builder()
-                        .type(ActorRequestType.MERGE_OPEN)
+                ActorRequest openRequest = ActorRequest.builder()
+                        .type(ActorRequestType.OPEN)
                         .keyedWindow(mergedWindow)
                         .build();
-                this.invokeActor(mergeOpenRequest);
+                this.invokeActor(openRequest);
                 break;
             }
             default:
@@ -258,9 +257,7 @@ class SupervisorActor extends AbstractActor {
     private void invokeActor(ActorRequest actorRequest) {
         String uniqueId = UniqueIdGenerator.getUniqueIdentifier(actorRequest.getKeyedWindow());
         switch (actorRequest.getType()) {
-            case OPEN:
-                // TODO - no need this
-            case MERGE_OPEN: {
+            case OPEN: {
                 SessionReducer sessionReducer = sessionReducerFactory.createSessionReducer();
                 ActorRef actorRef = getContext()
                         .actorOf(SessionReducerActor.props(

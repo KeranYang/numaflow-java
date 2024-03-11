@@ -87,7 +87,8 @@ class Service extends SessionReduceGrpc.SessionReduceImplBase {
                     // if the operation is a MERGE, make it a blocking call.
                     if (sessionReduceRequest.getOperation().getEvent()
                             == Sessionreduce.SessionReduceRequest.WindowOperation.Event.MERGE) {
-                        Timeout timeout = new Timeout(Duration.create(5, "seconds"));
+                        // set time out to 1 second as we expect a MERGE operation to finish quickly.
+                        Timeout timeout = new Timeout(Duration.create(1, "seconds"));
                         try {
                             // ask the supervisor to process a merge request.
                             Future<Object> future = Patterns.ask(
@@ -99,7 +100,6 @@ class Service extends SessionReduceGrpc.SessionReduceImplBase {
                                     future,
                                     timeout.duration());
                         } catch (Exception e) {
-                            // TODO - add more information
                             responseObserver.onError(new Throwable(
                                     "Supervisor actor failed processing a MERGE request"));
                         }

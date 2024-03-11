@@ -57,10 +57,6 @@ class SessionReducerActor extends AbstractActor {
     // receiving a new keyed window, update the keyed window.
     // this is for EXPAND operation.
     private void updateKeyedWindow(Sessionreduce.KeyedWindow newKeyedWindow) {
-        if (this.isClosed) {
-            throw new RuntimeException(
-                    "received an expand request but the session is already closed.");
-        }
         // update the keyed window
         this.keyedWindow = newKeyedWindow;
         // update the output stream to use the new keyed window
@@ -71,10 +67,6 @@ class SessionReducerActor extends AbstractActor {
     // when receiving a message, process it.
     // this is for OPEN/APPEND operation.
     private void invokeHandler(HandlerDatum handlerDatum) {
-        if (this.isClosed) {
-            throw new RuntimeException(
-                    "received a message but the session is already closed.");
-        }
         this.sessionReducer.processMessage(
                 keyedWindow.getKeysList().toArray(new String[0]),
                 handlerDatum,
@@ -85,19 +77,21 @@ class SessionReducerActor extends AbstractActor {
     // this is for CLOSE operation or for the close of gRPC input stream.
     private void handleEOF(String EOF) {
         if (this.isClosed) {
-            // we only process EOF once.
             return;
         }
-        this.processEOF();
+        // invoke handleEndOfStream to materialize the messages received so far.
+        this.sessionReducer.handleEndOfStream(
+                keyedWindow.getKeysList().toArray(new String[0]),
+                outputStream);
+        // construct an actor response and send it back to the supervisor actor, indicating the actor
+        // has finished processing all the messages for the corresponding keyed window.
+        getSender().tell(buildEOFResponse(), getSelf());
+        this.isClosed = true;
     }
 
     // receiving a GetAccumulatorRequest, return the accumulator of the window.
     // this is for MERGE operation.
     private void handleGetAccumulatorRequest(GetAccumulatorRequest getAccumulatorRequest) {
-        if (this.isClosed) {
-            throw new RuntimeException(
-                    "received a get accumulator request but the session is already closed.");
-        }
         getSender().tell(buildMergeResponse(
                         this.sessionReducer.accumulator(),
                         getAccumulatorRequest.getMergeTaskId())
@@ -110,22 +104,7 @@ class SessionReducerActor extends AbstractActor {
     // receiving a MergeAccumulatorRequest, merge the accumulator.
     // this is for MERGE operation.
     private void handleMergeAccumulatorRequest(MergeAccumulatorRequest mergeAccumulatorRequest) {
-        if (this.isClosed) {
-            throw new RuntimeException(
-                    "received a merge accumulator request but the session is already closed.");
-        }
         this.sessionReducer.mergeAccumulator(mergeAccumulatorRequest.getAccumulator());
-    }
-
-    private void processEOF() {
-        // invoke handleEndOfStream to materialize the messages received so far.
-        this.sessionReducer.handleEndOfStream(
-                keyedWindow.getKeysList().toArray(new String[0]),
-                outputStream);
-        // construct an actor response and send it back to the supervisor actor, indicating the actor
-        // has finished processing all the messages for the corresponding keyed window.
-        getSender().tell(buildEOFResponse(), getSelf());
-        this.isClosed = true;
     }
 
     private ActorResponse buildEOFResponse() {
