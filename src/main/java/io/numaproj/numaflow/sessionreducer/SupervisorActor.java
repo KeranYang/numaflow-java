@@ -32,13 +32,13 @@ class SupervisorActor extends AbstractActor {
     // actorMap maintains a map of active sessions.
     // key is the unique id of a session, value is the reference to the actor working on the session.
     private final Map<String, ActorRef> actorsMap = new HashMap<>();
-    // mergeTracker keeps track of the merge tasks that are in progress.
-    // key is the unique id of a merged task, value is how many accumulators are pending aggregation for this task.
-    private final Map<String, Integer> mergeTracker = new HashMap<>();
+    // number of accumulators to be collected by current MERGE request.
+    private int numberOfPendingAccumulators;
     // when set to true, isInputStreamClosed means the gRPC input stream has reached EOF.
     private boolean isInputStreamClosed = false;
-    // mergeRequestSender is used to keep the reference to the merge request sender,
+    // mergeRequestSender is used to track the reference to the merge request sender,
     // it's used to report back when the MERGE request is completed.
+    // the mergeRequest is sent using ask, which creates a temporary actor as sender behind the scene.
     private ActorRef mergeRequestSender;
 
     public SupervisorActor(
@@ -225,7 +225,7 @@ class SupervisorActor extends AbstractActor {
                         .setSlot(windowOperation.getKeyedWindows(0).getSlot()).build();
 
                 String mergeTaskId = UniqueIdGenerator.getUniqueIdentifier(mergedWindow);
-                this.mergeTracker.put(mergeTaskId, windowOperation.getKeyedWindowsCount());
+                this.numberOfPendingAccumulators = windowOperation.getKeyedWindowsCount();
                 for (Sessionreduce.KeyedWindow window : windowOperation.getKeyedWindowsList()) {
                     // tell the session reducer actor - "hey, you are about to be merged."
                     ActorRequest getAccumulatorRequest = ActorRequest.builder()
@@ -327,15 +327,11 @@ class SupervisorActor extends AbstractActor {
         } else {
             // handle get accumulator response
             String mergeTaskId = actorResponse.getMergeTaskId();
-            if (!this.mergeTracker.containsKey(mergeTaskId)) {
-                throw new RuntimeException(
-                        "received an accumulator but the corresponding merge task doesn't exist.");
-            }
             if (!this.actorsMap.containsKey(mergeTaskId)) {
                 throw new RuntimeException(
                         "received an accumulator but the corresponding parent merge session doesn't exist.");
             }
-            this.mergeTracker.put(mergeTaskId, this.mergeTracker.get(mergeTaskId) - 1);
+            this.numberOfPendingAccumulators--;
             if (!responseWindowId.equals(mergeTaskId)) {
                 // release the session that returns us the accumulator, indicating it has finished its lifecycle.
                 // the session is released without being explicitly closed because it has been merged and tracked by the newly merged session.
@@ -343,14 +339,12 @@ class SupervisorActor extends AbstractActor {
                 // gets de-referred and handled by Java GC.
                 this.actorsMap.remove(responseWindowId);
             }
-            this.actorsMap.get(mergeTaskId).tell(new MergeAccumulatorRequest(
-                    this.mergeTracker.get(mergeTaskId) == 0,
-                    actorResponse.getAccumulator()), getSelf());
-            if (this.mergeTracker.get(mergeTaskId) == 0) {
-                // remove the task from the merge tracker when there is no more pending accumulators to merge.
-                this.mergeTracker.remove(mergeTaskId);
+            this.actorsMap.get(mergeTaskId).tell(
+                    new MergeAccumulatorRequest(
+                            actorResponse.getAccumulator()), getSelf());
+            if (this.numberOfPendingAccumulators == 0) {
                 // tell the gRPC input stream that the merge request is completely processed.
-                this.mergeRequestSender.tell(new MergeResponse(), getSelf());
+                this.mergeRequestSender.tell(new MergeDoneResponse(), getSelf());
             }
         }
     }

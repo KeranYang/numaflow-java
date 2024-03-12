@@ -95,13 +95,14 @@ class Service extends SessionReduceGrpc.SessionReduceImplBase {
                                     supervisorActor,
                                     sessionReduceRequest,
                                     timeout);
-                            // await for the merge response.
-                            MergeResponse response = (MergeResponse) Await.result(
+                            // await for the merge done response.
+                            MergeDoneResponse response = (MergeDoneResponse) Await.result(
                                     future,
                                     timeout.duration());
                         } catch (Exception e) {
                             responseObserver.onError(new Throwable(
-                                    "Supervisor actor failed processing a MERGE request"));
+                                    "Supervisor actor failed processing a MERGE request: "
+                                            + e.getMessage()));
                         }
                     } else {
                         supervisorActor.tell(sessionReduceRequest, ActorRef.noSender());
