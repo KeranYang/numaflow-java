@@ -107,8 +107,8 @@ public class ServerTest {
     while (!outputStreamObserver.completed.get())
       ;
     List<SinkOuterClass.SinkResponse> responseList = outputStreamObserver.getSinkResponse();
-    // We expect numBatches * 2 + 1 responses, with the first one being the handshake
-    // response
+    // We expect numBatches * 2 + 1 responses,
+    // with the first one being the handshake response
     // numBatches responses for the EOT messages
     // numBatches responses for all the batches.
     assertEquals(numBatches * 2 + 1, responseList.size());
